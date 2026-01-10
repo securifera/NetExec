@@ -53,11 +53,13 @@ class ssh(connection):
                 "host": self.host,
                 "port": self.port,
                 "hostname": self.hostname,
+                "server_os": self.server_os_platform,
             }
         )
 
     def print_host_info(self):
-        self.logger.display(self.remote_version if self.remote_version != "Unknown SSH Version" else f"{self.remote_version}, skipping...")
+        self.logger.display(self.remote_version if self.remote_version !=
+                            "Unknown SSH Version" else f"{self.remote_version}, skipping...")
 
     def enum_host_info(self):
         if self.conn._transport.remote_version:
@@ -69,7 +71,8 @@ class ssh(connection):
         self.conn = paramiko.SSHClient()
         self.conn.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
-            self.conn.connect(self.host, port=self.port, timeout=self.args.ssh_timeout, look_for_keys=False, allow_agent=False)
+            self.conn.connect(self.host, port=self.port, timeout=self.args.ssh_timeout,
+                              look_for_keys=False, allow_agent=False)
         except AuthenticationException:
             return True
         except SSHException:
@@ -84,7 +87,8 @@ class ssh(connection):
         self.password = password
         try:
             if self.args.key_file or private_key:
-                self.logger.debug(f"Logging {self.host} with username: {username}, keyfile: {self.args.key_file}")
+                self.logger.debug(
+                    f"Logging {self.host} with username: {username}, keyfile: {self.args.key_file}")
                 self.conn.connect(
                     self.host,
                     port=self.port,
@@ -101,9 +105,11 @@ class ssh(connection):
                 if self.args.key_file:
                     with open(self.args.key_file) as f:
                         private_key = f.read().rstrip("\n")
-                cred_id = self.db.add_credential("key", username, password, key=private_key)
+                cred_id = self.db.add_credential(
+                    "key", username, password, key=private_key)
             else:
-                self.logger.debug(f"Logging {self.host} with username: {self.username}, password: {self.password}")
+                self.logger.debug(
+                    f"Logging {self.host} with username: {self.username}, password: {self.password}")
                 self.conn.connect(
                     self.host,
                     port=self.port,
@@ -114,24 +120,30 @@ class ssh(connection):
                     allow_agent=False,
                     banner_timeout=self.args.ssh_timeout,
                 )
-                cred_id = self.db.add_credential("plaintext", username, password)
+                cred_id = self.db.add_credential(
+                    "plaintext", username, password)
 
             self.check_shell(cred_id)
 
-            secret = process_secret(self.password) if not self.args.key_file else f"{process_secret(self.password)} (keyfile: {self.args.key_file})"
+            secret = process_secret(
+                self.password) if not self.args.key_file else f"{process_secret(self.password)} (keyfile: {self.args.key_file})"
             display_shell_access = f"{self.uac}{self.server_os_platform}{' - Shell access!' if self.shell_access else ''}"
-            self.logger.success(f"{self.username}:{process_secret(secret)} {self.mark_pwned()} {highlight(display_shell_access)}")
+            self.logger.success(
+                f"{self.username}:{process_secret(secret)} {self.mark_pwned()} {highlight(display_shell_access)}")
             return True
         except AuthenticationException as e:
             if "Private key file is encrypted" in str(e):
-                self.logger.fail(f"{username}:{process_secret(password)} Could not load private key, error: {e}")
+                self.logger.fail(
+                    f"{username}:{process_secret(password)} Could not load private key, error: {e}")
             else:
                 self.logger.fail(f"{username}:{process_secret(password)}")
         except SSHException as e:
             if "Invalid key" in str(e):
-                self.logger.fail(f"{username}:{process_secret(password)} Could not decrypt private key, invalid password")
+                self.logger.fail(
+                    f"{username}:{process_secret(password)} Could not decrypt private key, invalid password")
             elif "Error reading SSH protocol banner" in str(e):
-                self.logger.error(f"Internal Paramiko error for {username}:{process_secret(password)}, {e}")
+                self.logger.error(
+                    f"Internal Paramiko error for {username}:{process_secret(password)}, {e}")
             else:
                 self.logger.exception(e)
         except Exception as e:
@@ -144,42 +156,53 @@ class ssh(connection):
 
         # Some IOT devices will not raise exception in self.conn._transport.auth_password / self.conn._transport.auth_publickey
         # Check Linux
-        stdout = self.conn.exec_command("id")[1].read().decode(self.args.codec, errors="ignore")
+        stdout = self.conn.exec_command("id")[1].read().decode(
+            self.args.codec, errors="ignore")
         if stdout:
             self.server_os_platform = "Linux"
             self.logger.debug(f"Linux detected for user: {stdout}")
             self.shell_access = True
-            self.db.add_loggedin_relation(cred_id, host_id, shell=self.shell_access)
+            self.db.add_loggedin_relation(
+                cred_id, host_id, shell=self.shell_access)
             self.check_linux_priv()
             if self.admin_privs:
-                self.logger.debug(f"User {self.username} logged in successfully and is root!")
+                self.logger.debug(
+                    f"User {self.username} logged in successfully and is root!")
                 if self.args.key_file:
-                    self.db.add_admin_user("key", self.username, self.password, host_id=host_id, cred_id=cred_id)
+                    self.db.add_admin_user(
+                        "key", self.username, self.password, host_id=host_id, cred_id=cred_id)
                 else:
-                    self.db.add_admin_user("plaintext", self.username, self.password, host_id=host_id, cred_id=cred_id)
+                    self.db.add_admin_user(
+                        "plaintext", self.username, self.password, host_id=host_id, cred_id=cred_id)
             return
 
         # Check Windows
-        stdout = self.conn.exec_command("whoami /priv")[1].read().decode(self.args.codec, errors="ignore")
+        stdout = self.conn.exec_command(
+            "whoami /priv")[1].read().decode(self.args.codec, errors="ignore")
         if stdout:
             self.server_os_platform = "Windows"
             self.logger.debug("Windows detected")
             self.shell_access = True
-            self.db.add_loggedin_relation(cred_id, host_id, shell=self.shell_access)
+            self.db.add_loggedin_relation(
+                cred_id, host_id, shell=self.shell_access)
             self.check_windows_priv(stdout)
             if self.admin_privs:
-                self.logger.debug(f"User {self.username} logged in successfully and is admin!")
+                self.logger.debug(
+                    f"User {self.username} logged in successfully and is admin!")
                 if self.args.key_file:
-                    self.db.add_admin_user("key", self.username, self.password, host_id=host_id, cred_id=cred_id)
+                    self.db.add_admin_user(
+                        "key", self.username, self.password, host_id=host_id, cred_id=cred_id)
                 else:
-                    self.db.add_admin_user("plaintext", self.username, self.password, host_id=host_id, cred_id=cred_id)
+                    self.db.add_admin_user(
+                        "plaintext", self.username, self.password, host_id=host_id, cred_id=cred_id)
             return
 
         # No shell access
         self.shell_access = False
         self.logger.debug(f"User: {self.username} can't get a basic shell")
         self.server_os_platform = "Network Devices"
-        self.db.add_loggedin_relation(cred_id, host_id, shell=self.shell_access)
+        self.db.add_loggedin_relation(
+            cred_id, host_id, shell=self.shell_access)
 
     def check_windows_priv(self, stdout):
         if "SeDebugPrivilege" in stdout:
@@ -207,7 +230,8 @@ class ssh(connection):
         for keyword in admin_flag:
             match = re.findall(re.escape(keyword), stdout)
             if match:
-                self.logger.info(f"User: '{self.username}' matched keyword: {match[0]}")
+                self.logger.info(
+                    f"User: '{self.username}' matched keyword: {match[0]}")
                 self.admin_privs = admin_flag[match[0]][0]
                 if not self.admin_privs:
                     tips = admin_flag[match[0]][1]
@@ -219,7 +243,8 @@ class ssh(connection):
 
     def check_linux_priv_sudo(self):
         if not self.password:
-            self.logger.error("Check admin with sudo does not support using a private key")
+            self.logger.error(
+                "Check admin with sudo does not support using a private key")
             return
 
         if self.args.sudo_check_method:
@@ -233,14 +258,18 @@ class ssh(connection):
             if "stdin" in stdout:
                 shadow_backup = f"/tmp/{uuid.uuid4()}"
                 # sudo support stdin password
-                self.conn.exec_command(f"echo {self.password} | sudo -S cp /etc/shadow {shadow_backup} >/dev/null 2>&1 &")
-                self.conn.exec_command(f"echo {self.password} | sudo -S chmod 777 {shadow_backup} >/dev/null 2>&1 &")
+                self.conn.exec_command(
+                    f"echo {self.password} | sudo -S cp /etc/shadow {shadow_backup} >/dev/null 2>&1 &")
+                self.conn.exec_command(
+                    f"echo {self.password} | sudo -S chmod 777 {shadow_backup} >/dev/null 2>&1 &")
                 tries = 1
                 while True:
                     self.logger.info(f"Checking {shadow_backup} if it existed")
-                    _, _, stderr = self.conn.exec_command(f"ls {shadow_backup}")
+                    _, _, stderr = self.conn.exec_command(
+                        f"ls {shadow_backup}")
                     if tries >= self.args.get_output_tries:
-                        self.logger.info(f"The file {shadow_backup} does not exist, the pipe may be hanging. Increase the number of tries with the option '--get-output-tries' or change other method with '--sudo-check-method'. If it's still failing, maybe sudo shell does not work with the current user")
+                        self.logger.info(
+                            f"The file {shadow_backup} does not exist, the pipe may be hanging. Increase the number of tries with the option '--get-output-tries' or change other method with '--sudo-check-method'. If it's still failing, maybe sudo shell does not work with the current user")
                         break
                     if stderr.read().decode("utf-8"):
                         time.sleep(2)
@@ -250,9 +279,11 @@ class ssh(connection):
                         self.admin_privs = True
                         break
                 self.logger.info(f"Remove up temporary files {shadow_backup}")
-                self.conn.exec_command(f"echo {self.password} | sudo -S rm -rf {shadow_backup}")
+                self.conn.exec_command(
+                    f"echo {self.password} | sudo -S rm -rf {shadow_backup}")
             else:
-                self.logger.error("Command: 'sudo' not support stdin mode, running command with 'sudo' failed")
+                self.logger.error(
+                    "Command: 'sudo' not support stdin mode, running command with 'sudo' failed")
                 return
         else:
             _, stdout, _ = self.conn.exec_command("mkfifo --help")
@@ -263,34 +294,44 @@ class ssh(connection):
                 pipe_stdin = f"/tmp/systemd-{uuid.uuid4()}"
                 pipe_stdout = f"/tmp/systemd-{uuid.uuid4()}"
                 shadow_backup = f"/tmp/{uuid.uuid4()}"
-                self.conn.exec_command(f"mkfifo {pipe_stdin}; tail -f {pipe_stdin} | /bin/sh 2>&1 > {pipe_stdout} >/dev/null 2>&1 &")
+                self.conn.exec_command(
+                    f"mkfifo {pipe_stdin}; tail -f {pipe_stdin} | /bin/sh 2>&1 > {pipe_stdout} >/dev/null 2>&1 &")
                 # 'script -qc /bin/sh /dev/null' means "upgrade" the shell, like reverse shell from netcat
-                self.conn.exec_command(f"echo 'script -qc /bin/sh /dev/null' > {pipe_stdin}")
-                self.conn.exec_command(f"echo 'sudo -s' > {pipe_stdin} && echo '{self.password}' > {pipe_stdin}")
+                self.conn.exec_command(
+                    f"echo 'script -qc /bin/sh /dev/null' > {pipe_stdin}")
+                self.conn.exec_command(
+                    f"echo 'sudo -s' > {pipe_stdin} && echo '{self.password}' > {pipe_stdin}")
                 # Sometime the pipe will hanging(only happen with paramiko)
                 # Can't get "whoami" or "id" result in pipe_stdout, maybe something wrong using pipe with paramiko
                 # But one thing I can confirm, is the command was executed even can't get result from pipe_stdout
                 tries = 1
-                self.logger.info(f"Copy /etc/shadow to {shadow_backup} if pass the sudo auth")
+                self.logger.info(
+                    f"Copy /etc/shadow to {shadow_backup} if pass the sudo auth")
                 while True:
                     self.logger.info(f"Checking {shadow_backup} if it existed")
-                    _, _, stderr = self.conn.exec_command(f"ls {shadow_backup}")
+                    _, _, stderr = self.conn.exec_command(
+                        f"ls {shadow_backup}")
                     if tries >= self.args.get_output_tries:
-                        self.logger.info(f"The file {shadow_backup} does not exist, the pipe may be hanging. Increase the number of tries with the option '--get-output-tries' or change other method with '--sudo-check-method'. If it's still failing, maybe sudo shell does not work with the current user")
+                        self.logger.info(
+                            f"The file {shadow_backup} does not exist, the pipe may be hanging. Increase the number of tries with the option '--get-output-tries' or change other method with '--sudo-check-method'. If it's still failing, maybe sudo shell does not work with the current user")
                         break
 
                     if stderr.read().decode("utf-8"):
                         time.sleep(2)
-                        self.conn.exec_command(f"echo 'cp /etc/shadow {shadow_backup} && chmod 777 {shadow_backup}' > {pipe_stdin}")
+                        self.conn.exec_command(
+                            f"echo 'cp /etc/shadow {shadow_backup} && chmod 777 {shadow_backup}' > {pipe_stdin}")
                         tries += 1
                     else:
                         self.logger.info(f"{shadow_backup} existed")
                         self.admin_privs = True
                         break
-                self.logger.info(f"Remove up temporary files {shadow_backup} {pipe_stdin} {pipe_stdout}")
-                self.conn.exec_command(f"echo 'rm -rf  {shadow_backup}' > {pipe_stdin} && rm -rf {pipe_stdin} {pipe_stdout}")
+                self.logger.info(
+                    f"Remove up temporary files {shadow_backup} {pipe_stdin} {pipe_stdout}")
+                self.conn.exec_command(
+                    f"echo 'rm -rf  {shadow_backup}' > {pipe_stdin} && rm -rf {pipe_stdin} {pipe_stdout}")
             else:
-                self.logger.error("Command: 'mkfifo' unavailable, running command with 'sudo' failed")
+                self.logger.error(
+                    "Command: 'mkfifo' unavailable, running command with 'sudo' failed")
                 return
 
     def put_file_single(self, sftp_conn, src, dst):
@@ -311,7 +352,8 @@ class ssh(connection):
         self.logger.display(f'Copying "{remote_path}" to "{download_path}"')
         try:
             sftp_conn.get(remote_path, download_path)
-            self.logger.success(f'File "{remote_path}" was downloaded to "{download_path}"')
+            self.logger.success(
+                f'File "{remote_path}" was downloaded to "{download_path}"')
         except Exception as e:
             self.logger.fail(f'Error getting file "{remote_path}": {e}')
             if os.path.getsize(download_path) == 0:
