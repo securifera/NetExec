@@ -16,7 +16,8 @@ from impacket.dcerpc.v5.rpcrt import RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_AUTHN_
 from impacket.dcerpc.v5.dcomrt import DCOMConnection
 from impacket.dcerpc.v5.dcom.wmi import CLSID_WbemLevel1Login, IID_IWbemLevel1Login, IWbemLevel1Login
 
-MSRPC_UUID_PORTMAP = uuidtup_to_bin(("E1AF8308-5D1F-11C9-91A4-08002B14A0FA", "3.0"))
+MSRPC_UUID_PORTMAP = uuidtup_to_bin(
+    ("E1AF8308-5D1F-11C9-91A4-08002B14A0FA", "3.0"))
 
 
 class wmi(connection):
@@ -56,7 +57,8 @@ class wmi(connection):
                 "protocol": "WMI",
                 "host": self.host,
                 "port": self.port,
-                "hostname": self.hostname
+                "hostname": self.hostname,
+                "server_os": self.server_os,
             }
         )
 
@@ -70,10 +72,12 @@ class wmi(connection):
 
     def create_conn_obj(self):
         connection_target = fr"ncacn_ip_tcp:{self.remoteName}[{self.port!s}]"
-        self.logger.debug(f"Creating WMI connection object to {connection_target}")
+        self.logger.debug(
+            f"Creating WMI connection object to {connection_target}")
         try:
             rpctansport = transport.DCERPCTransportFactory(connection_target)
-            rpctansport.set_credentials(username="", password="", domain="", lmhash="", nthash="", aesKey="")
+            rpctansport.set_credentials(
+                username="", password="", domain="", lmhash="", nthash="", aesKey="")
             rpctansport.setRemoteHost(self.host)
             rpctansport.set_connect_timeout(self.args.rpc_timeout)
             dce = rpctansport.get_dce_rpc()
@@ -82,10 +86,12 @@ class wmi(connection):
             dce.bind(MSRPC_UUID_PORTMAP)
             dce.disconnect()
         except Exception as e:
-            self.logger.debug(f"Received error creating WMI connection object: {e}")
+            self.logger.debug(
+                f"Received error creating WMI connection object: {e}")
             return False
         else:
-            self.logger.debug(f"Successfully created WMI connection object to {connection_target}")
+            self.logger.debug(
+                f"Successfully created WMI connection object to {connection_target}")
             self.conn = rpctansport
             return True
 
@@ -96,7 +102,8 @@ class wmi(connection):
         bind = MSRPCBind()
         item = CtxItem()
         item["AbstractSyntax"] = epm.MSRPC_UUID_PORTMAP
-        item["TransferSyntax"] = uuidtup_to_bin(("8a885d04-1ceb-11c9-9fe8-08002b104860", "2.0"))
+        item["TransferSyntax"] = uuidtup_to_bin(
+            ("8a885d04-1ceb-11c9-9fe8-08002b104860", "2.0"))
         item["ContextID"] = 0
         item["TransItems"] = 1
         bind.addCtxItem(item)
@@ -106,7 +113,8 @@ class wmi(connection):
         packet["pduData"] = bind.getData()
         packet["call_id"] = 1
 
-        auth = ntlm.getNTLMSSPType1("", "", signingRequired=True, use_ntlmv2=True)
+        auth = ntlm.getNTLMSSPType1(
+            "", "", signingRequired=True, use_ntlmv2=True)
         sec_trailer = SEC_TRAILER()
         sec_trailer["auth_type"] = RPC_C_AUTHN_WINNT
         sec_trailer["auth_level"] = RPC_C_AUTHN_LEVEL_PKT_INTEGRITY
@@ -133,6 +141,7 @@ class wmi(connection):
             self.hostname = ntlm_info["hostname"]
             self.server_os = ntlm_info["os_version"]
             self.logger.extra["hostname"] = self.hostname
+            self.logger.extra["server_os"] = self.server_os
         else:
             self.hostname = self.host
         if self.args.local_auth:
@@ -140,18 +149,30 @@ class wmi(connection):
         if self.args.domain:
             self.domain = self.args.domain
 
+        try:
+            self.db.add_host(
+                self.host,
+                self.hostname,
+                self.domain,
+                self.server_os,
+            )
+        except Exception as e:
+            self.logger.debug(f"Error adding host {self.host} into db: {e!s}")
+
         # DCOM connection with kerberos needed
         self.remoteName = self.host if not self.kerberos else f"{self.hostname}.{self.domain}"
 
         if not self.kdcHost and self.domain:
             result = self.resolver(self.domain)
             self.kdcHost = result["host"] if result else None
-            self.logger.info(f"Resolved domain: {self.domain} with dns, kdcHost: {self.kdcHost}")
+            self.logger.info(
+                f"Resolved domain: {self.domain} with dns, kdcHost: {self.kdcHost}")
 
     def print_host_info(self):
         self.logger.extra["protocol"] = "RPC"
         self.logger.extra["port"] = "135"
-        self.logger.display(f"{self.server_os} (name:{self.hostname}) (domain:{self.targetDomain})")
+        self.logger.display(
+            f"{self.server_os} (name:{self.hostname}) (domain:{self.targetDomain})")
 
     def check_if_admin(self):
         try:
@@ -169,7 +190,8 @@ class wmi(connection):
                 if not self.stringBinding:
                     error_msg = "Check admin error: dcom initialization failed: can't get target stringbinding, maybe cause by IPv6 or any other issues, please check your target again"
 
-                self.logger.fail(error_msg) if not flag else self.logger.debug(error_msg)
+                self.logger.fail(
+                    error_msg) if not flag else self.logger.debug(error_msg)
             else:
                 try:
                     self.iWbemLevel1Login = IWbemLevel1Login(iInterface)
@@ -200,18 +222,21 @@ class wmi(connection):
             self.nthash = nthash
             self.lmhash = lmhash
 
-        kerb_pass = next(s for s in [nthash, password, aesKey] if s) if not all(s == "" for s in [nthash, password, aesKey]) else ""
+        kerb_pass = next(s for s in [nthash, password, aesKey] if s) if not all(
+            s == "" for s in [nthash, password, aesKey]) else ""
 
         if useCache and kerb_pass == "":
             ccache = CCache.loadFile(os.getenv("KRB5CCNAME"))
             self.logger.debug(f"Using ccache from {ccache}")
-            username = ccache.credentials[0].header["client"].prettyPrint().decode().split("@")[0]
+            username = ccache.credentials[0].header["client"].prettyPrint(
+            ).decode().split("@")[0]
             self.username = username
         used_ccache = " from ccache" if useCache else f":{process_secret(kerb_pass)}"
 
         try:
             self.logger.debug(f"Attempting to connect via WMI to {self.host}")
-            self.conn.set_credentials(username=username, password=password, domain=domain, lmhash=lmhash, nthash=nthash, aesKey=self.aesKey)
+            self.conn.set_credentials(username=username, password=password,
+                                      domain=domain, lmhash=lmhash, nthash=nthash, aesKey=self.aesKey)
             self.conn.setRemoteHost(self.host)
             self.conn.set_kerberos(True, kdcHost)
             dce = self.conn.get_dce_rpc()
@@ -236,7 +261,8 @@ class wmi(connection):
                 return False
         else:
             try:
-                self.logger.debug("Got valid creds, trying to get data from RPC connection")
+                self.logger.debug(
+                    "Got valid creds, trying to get data from RPC connection")
                 entry_handle = epm.ept_lookup_handle_t()
                 request = epm.ept_lookup()
                 request["inquiry_type"] = 0x0
@@ -254,7 +280,8 @@ class wmi(connection):
                     if code in error_msg:
                         error_msg = self.rpc_error_status[code]
                 out = f"{self.domain}\\{self.username}{used_ccache} {error_msg.upper()}"
-                self.logger.fail(out, color=("red" if "access_denied" in error_msg else "magenta"))
+                self.logger.fail(out, color=(
+                    "red" if "access_denied" in error_msg else "magenta"))
                 return False
             else:
                 self.doKerberos = True
@@ -269,7 +296,8 @@ class wmi(connection):
         self.username = username
         self.domain = domain
         try:
-            self.conn.set_credentials(username=self.username, password=self.password, domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
+            self.conn.set_credentials(username=self.username, password=self.password,
+                                      domain=self.domain, lmhash=self.lmhash, nthash=self.nthash)
             dce = self.conn.get_dce_rpc()
             dce.set_auth_type(RPC_C_AUTHN_WINNT)
             dce.set_auth_level(RPC_C_AUTHN_LEVEL_PKT_PRIVACY)
@@ -299,7 +327,8 @@ class wmi(connection):
                 for code in self.rpc_error_status:
                     if code in error_msg:
                         error_msg = self.rpc_error_status[code]
-                self.logger.fail((f"{self.domain}\\{self.username}:{process_secret(self.password)} ({error_msg.upper()})"), color=("red" if "access_denied" in error_msg else "magenta"))
+                self.logger.fail((f"{self.domain}\\{self.username}:{process_secret(self.password)} ({error_msg.upper()})"), color=(
+                    "red" if "access_denied" in error_msg else "magenta"))
                 return False
             else:
                 self.check_if_admin()
@@ -324,7 +353,8 @@ class wmi(connection):
         self.lmhash = lmhash
 
         try:
-            self.conn.set_credentials(username=self.username, password=self.password, domain=self.domain, lmhash=lmhash, nthash=nthash)
+            self.conn.set_credentials(
+                username=self.username, password=self.password, domain=self.domain, lmhash=lmhash, nthash=nthash)
             dce = self.conn.get_dce_rpc()
             dce.set_auth_type(RPC_C_AUTHN_WINNT)
             dce.set_auth_level(RPC_C_AUTHN_LEVEL_PKT_PRIVACY)
@@ -354,7 +384,8 @@ class wmi(connection):
                 for code in self.rpc_error_status:
                     if code in error_msg:
                         error_msg = self.rpc_error_status[code]
-                self.logger.fail((f"{self.domain}\\{self.username}:{process_secret(self.nthash)} ({error_msg.upper()})"), color=("red" if "access_denied" in error_msg else "magenta"))
+                self.logger.fail((f"{self.domain}\\{self.username}:{process_secret(self.nthash)} ({error_msg.upper()})"), color=(
+                    "red" if "access_denied" in error_msg else "magenta"))
                 return False
             else:
                 self.check_if_admin()
@@ -431,11 +462,13 @@ class wmi(connection):
                 get_output = True
 
         if "systeminfo" in command and self.args.exec_timeout < 10:
-            self.logger.fail("Execute 'systeminfo' must set the interval time higher than 10 seconds")
+            self.logger.fail(
+                "Execute 'systeminfo' must set the interval time higher than 10 seconds")
             return ""
 
         if self.server_os is not None and "NT 5" in self.server_os:
-            self.logger.fail("Execute command failed, not support current server os (version < NT 6)")
+            self.logger.fail(
+                "Execute command failed, not support current server os (version < NT 6)")
             return ""
 
         if self.args.exec_method == "wmiexec":
@@ -457,7 +490,8 @@ class wmi(connection):
         output = exec_method.execute(command, get_output, use_powershell=use_powershell)
 
         if self.args.execute and get_output:
-            self.logger.success(f'Executed command: "{command}" via {self.args.exec_method}')
+            self.logger.success(
+                f'Executed command: "{command}" via {self.args.exec_method}')
             buf = StringIO(output).readlines()
             for line in buf:
                 if line.strip():
@@ -476,7 +510,8 @@ class wmi(connection):
         output = self.execute(command, get_output, use_powershell=True)
 
         if self.args.execute_psh and get_output:
-            self.logger.success(f'Executed PowerShell command: "{command}" via {self.args.exec_method}')
+            self.logger.success(
+                f'Executed PowerShell command: "{command}" via {self.args.exec_method}')
             buf = StringIO(output).readlines()
             for line in buf:
                 if line.strip():
